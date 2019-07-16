@@ -8,229 +8,234 @@
 {% endblock %}
 
 {% block body_base %}
-    <div id="playerContainer" style="display:block;width:100%;">
-    </div>
-    <style>
-        #playerContainer_videoContainer {
-            background-color: #222;
-            background-image: linear-gradient(to bottom, #333333, #111111);
-        }
 
-        #playerContainer_videoContainer_bkg {
-            display: none;
-        }
-
-        {% if logo is defined and logo %}
-        #paella_logo\.png {
-             content: url("{{ logo }}");
-        }
-        {% else %}
-        #paella_logo\.png {
-            display: none !important;
-        }
-        {% endif %}
-
-        {% if intro %}
-            #introContainer {
-                position: absolute;
-                top: 0;
-                right: 0;
-                bottom: 0;
-                left: 0;
-                overflow: hidden;
-                z-index: 88888;
+    {% if track is not defined and tracks is not defined %}
+        {% include "PumukitBasePlayerBundle::player_no_track.html.twig" %}
+    {% else %}
+        <div id="playerContainer" style="display:block;width:100%;">
+        </div>
+        <style>
+            #playerContainer_videoContainer {
+                background-color: #222;
+                background-image: linear-gradient(to bottom, #333333, #111111);
             }
 
-            #intro {
-                width: 100%;
-                height: 100%;
+            #playerContainer_videoContainer_bkg {
+                display: none;
             }
 
-            #skipContainer{
-                position: absolute;
-                bottom: 3em;
-                cursor: pointer;
-                max-width: 300px;
-                right: 1em;
-                background: rgba(80, 80, 80, 0.8);
-                font-weight: bold;
-                color: #fafafa;
-                padding: .65em;
-                font-size: 1.2em;
-                z-index: 99999;
+            {% if logo is defined and logo %}
+            #paella_logo\.png {
+                 content: url("{{ logo }}");
             }
-
-            #overlay {
-                position: absolute;
-                opacity: 0.7;
-                top: 0;
-                bottom: 0;
-                left: 0;
-                right: 0;
-                z-index: 99998;
-                cursor: pointer;
+            {% else %}
+            #paella_logo\.png {
+                display: none !important;
             }
+            {% endif %}
 
-            .playButtonOnScreenIcon {
-                height: 100%;
-            }
-        {% endif %}
+            {% if intro %}
+                #introContainer {
+                    position: absolute;
+                    top: 0;
+                    right: 0;
+                    bottom: 0;
+                    left: 0;
+                    overflow: hidden;
+                    z-index: 88888;
+                }
 
-        {% if not multimediaObject.getProperty('opencast') %}
-            .buttonPlugin.searchButton{
-                display:none !important;
-            }
+                #intro {
+                    width: 100%;
+                    height: 100%;
+                }
 
-            .buttonPlugin.footPrints{
-                display:none !important;
-            }
-        {% endif %}
-    </style>
-    <script>
+                #skipContainer{
+                    position: absolute;
+                    bottom: 3em;
+                    cursor: pointer;
+                    max-width: 300px;
+                    right: 1em;
+                    background: rgba(80, 80, 80, 0.8);
+                    font-weight: bold;
+                    color: #fafafa;
+                    padding: .65em;
+                    font-size: 1.2em;
+                    z-index: 99999;
+                }
 
-        localStorage.setItem('opencast_host', "{{ opencast_host }}");
-        var isOpencast = "{{ multimediaObject.getProperty('opencast') }}";
-        if(isOpencast) {
-            localStorage.setItem('opencastId',"{{ multimediaObject.getProperty('opencast') }}");
-        } else {
-            localStorage.removeItem('opencastId');
-        }
+                #overlay {
+                    position: absolute;
+                    opacity: 0.7;
+                    top: 0;
+                    bottom: 0;
+                    left: 0;
+                    right: 0;
+                    z-index: 99998;
+                    cursor: pointer;
+                }
 
-        var username = "{{ app.user.username|default('anonymous') }}";
-        var useremail = "{{ app.user.email|default('anonymous@pumukit.org') }}";
-
-        {% if 'on_play' == when_dispatch_view_event|default('') %}
-        $(document).bind(paella.events.play, function (event, params) {
-          if (!window.notifyVideoPlayedReq) {
-            window.notifyVideoPlayedReq = $.post('{{ path('pumukit_trackplayed_index', {id: tracks[0].id}) }}');
-          }
-        });
-        {% endif %}
-
-        $(document).bind(paella.events.loadComplete, function (event, params) {
-            {% if (intro and not (app.request.headers.get('user-agent') matches '/Mobi/'))
-                or (autostart is defined and autostart == 'true') %}
-                if (!base.userAgent.browser.IsMobileVersion && !document.querySelector("#introContainer")){
-                    setTimeout(function () {
-                        paella.player.play().catch(function(err) {
-                            {% if autoplay_fallback == 'mute_fallback' %}
-                                paella.player.videoContainer.setVolume(0);
-                                paella.player.play();
-                            {% endif %}
-                        });
-                    }, 300);
+                .playButtonOnScreenIcon {
+                    height: 100%;
                 }
             {% endif %}
 
-            setTimeout(function () {
-                setPaellaProfile("{{ getPaellaLayout(multimediaObject, app.request) }}");
-            }, 300);
-
-        });
-
-        {% if intro and not (app.request.headers.get('user-agent') matches '/Mobi/') %}
-            const container= document.querySelector("#playerContainer");
-            const intro = document.createElement("video");
-            const introContainer = document.createElement("div");
-            const skipContainer = document.createElement("div");
-            const overlay = document.createElement("overlay");
-
-            intro.src = "{{ absolute_url(intro) }}";
-            intro.poster = "{{ multimediaObject|first_url_pic(true) }}";
-            intro.id = "intro";
-            intro.addEventListener('ended', onEndedVideo);
-            intro.autoplay = "{{ autostart != 'false' }}";
-            intro.muted= base.userAgent.browser.IsMobileVersion;
-
-            skipContainer.id = "skipContainer";
-            introContainer.id = "introContainer";
-            overlay.id = "overlay";
-            skipContainer.addEventListener("click", onEndedVideo);
-
-            skipContainer.innerHTML = '{{ "Next Up" | trans}}';
-
-            introContainer.appendChild(intro);
-            introContainer.appendChild(skipContainer);
-            introContainer.appendChild(overlay);
-            container.appendChild(introContainer);
-
-
-            playPauseCanvas(overlay, intro);
-            loadPaella('playerContainer', '{{ multimediaObject.id }}');
-
-            function onEndedVideo() {
-                container.removeChild(introContainer);
-                if(paella.player.videoLoader.loadStatus){
-                    setTimeout(function () {
-                        paella.player.play();
-                    }, 300);
+            {% if not multimediaObject.getProperty('opencast') %}
+                .buttonPlugin.searchButton{
+                    display:none !important;
                 }
+
+                .buttonPlugin.footPrints{
+                    display:none !important;
+                }
+            {% endif %}
+        </style>
+        <script>
+
+            localStorage.setItem('opencast_host', "{{ opencast_host }}");
+            var isOpencast = "{{ multimediaObject.getProperty('opencast') }}";
+            if(isOpencast) {
+                localStorage.setItem('opencastId',"{{ multimediaObject.getProperty('opencast') }}");
+            } else {
+                localStorage.removeItem('opencastId');
             }
 
-            function playPauseCanvas(mainContainer, video){
-                const icon = document.createElement('canvas');
-                icon.className = 'playButtonOnScreenIcon';
-                icon.style.display = "{{ autostart != 'false' ? 'none' : 'block' }}";
-                if(/^((?!chrome|android).)*safari/i.test(navigator.userAgent)) {
-                    icon.style.display = 'block';
-                }
+            var username = "{{ app.user.username|default('anonymous') }}";
+            var useremail = "{{ app.user.email|default('anonymous@pumukit.org') }}";
 
-                mainContainer.appendChild(icon);
+            {% if 'on_play' == when_dispatch_view_event|default('') %}
+            $(document).bind(paella.events.play, function (event, params) {
+              if (!window.notifyVideoPlayedReq) {
+                window.notifyVideoPlayedReq = $.post('{{ path('pumukit_trackplayed_index', {id: tracks[0].id}) }}');
+              }
+            });
+            {% endif %}
 
-                setTimeout(function(){
-                    const width = jQuery(mainContainer).innerWidth();
-                    const height = jQuery(mainContainer).innerHeight();
-
-                    icon.width = width;
-                    icon.height = height;
-
-                    const iconSize = (width<height) ? width/3 : height/3;
-
-                    const ctx = icon.getContext('2d');
-
-                    ctx.translate((width-iconSize)/2, (height-iconSize)/2);
-
-                    ctx.beginPath();
-                    ctx.arc(iconSize/2, iconSize/2 ,iconSize/2, 0, 2*Math.PI, true);
-                    ctx.closePath();
-
-                    ctx.strokeStyle = 'white';
-                    ctx.lineWidth = 10;
-                    ctx.stroke();
-                    ctx.fillStyle = '#8f8f8f';
-                    ctx.fill();
-
-                    ctx.beginPath();
-                    ctx.moveTo(iconSize/3, iconSize/4);
-                    ctx.lineTo(3*iconSize/4, iconSize/2);
-                    ctx.lineTo(iconSize/3, 3*iconSize/4);
-                    ctx.lineTo(iconSize/3, iconSize/4);
-                    ctx.closePath();
-                    ctx.fillStyle = 'white';
-                    ctx.fill();
-
-                    ctx.stroke();
-                }, 100);
-
-                $(mainContainer).bind('click', function () {
-                    if(video.paused){
-                        icon.style.display = 'none';
-                        video.play();
-                    }else{
-                        icon.style.display = 'block';
-                        video.pause();
+            $(document).bind(paella.events.loadComplete, function (event, params) {
+                {% if (intro and not (app.request.headers.get('user-agent') matches '/Mobi/'))
+                    or (autostart is defined and autostart == 'true') %}
+                    if (!base.userAgent.browser.IsMobileVersion && !document.querySelector("#introContainer")){
+                        setTimeout(function () {
+                            paella.player.play().catch(function(err) {
+                                {% if autoplay_fallback == 'mute_fallback' %}
+                                    paella.player.videoContainer.setVolume(0);
+                                    paella.player.play();
+                                {% endif %}
+                            });
+                        }, 300);
                     }
-                });
-            }
-        {% else %}
-            loadPaella('playerContainer', '{{ multimediaObject.id }}');
-        {% endif %}
+                {% endif %}
 
-        function setPaellaProfile(profileName) {
-            $('.viewModeItemButton').removeClass('selected');
-            $('.viewModeItemButton.' + profileName).addClass('selected');
-            paella.player.setProfile(profileName);
-            base.cookies.set("lastProfile", profileName);
-        }
-    </script>
+                setTimeout(function () {
+                    setPaellaProfile("{{ getPaellaLayout(multimediaObject, app.request) }}");
+                }, 300);
+
+            });
+
+            {% if intro and not (app.request.headers.get('user-agent') matches '/Mobi/') %}
+                const container= document.querySelector("#playerContainer");
+                const intro = document.createElement("video");
+                const introContainer = document.createElement("div");
+                const skipContainer = document.createElement("div");
+                const overlay = document.createElement("overlay");
+
+                intro.src = "{{ absolute_url(intro) }}";
+                intro.poster = "{{ multimediaObject|first_url_pic(true) }}";
+                intro.id = "intro";
+                intro.addEventListener('ended', onEndedVideo);
+                intro.autoplay = "{{ autostart != 'false' }}";
+                intro.muted= base.userAgent.browser.IsMobileVersion;
+
+                skipContainer.id = "skipContainer";
+                introContainer.id = "introContainer";
+                overlay.id = "overlay";
+                skipContainer.addEventListener("click", onEndedVideo);
+
+                skipContainer.innerHTML = '{{ "Next Up" | trans}}';
+
+                introContainer.appendChild(intro);
+                introContainer.appendChild(skipContainer);
+                introContainer.appendChild(overlay);
+                container.appendChild(introContainer);
+
+
+                playPauseCanvas(overlay, intro);
+                loadPaella('playerContainer', '{{ multimediaObject.id }}');
+
+                function onEndedVideo() {
+                    container.removeChild(introContainer);
+                    if(paella.player.videoLoader.loadStatus){
+                        setTimeout(function () {
+                            paella.player.play();
+                        }, 300);
+                    }
+                }
+
+                function playPauseCanvas(mainContainer, video){
+                    const icon = document.createElement('canvas');
+                    icon.className = 'playButtonOnScreenIcon';
+                    icon.style.display = "{{ autostart != 'false' ? 'none' : 'block' }}";
+                    if(/^((?!chrome|android).)*safari/i.test(navigator.userAgent)) {
+                        icon.style.display = 'block';
+                    }
+
+                    mainContainer.appendChild(icon);
+
+                    setTimeout(function(){
+                        const width = jQuery(mainContainer).innerWidth();
+                        const height = jQuery(mainContainer).innerHeight();
+
+                        icon.width = width;
+                        icon.height = height;
+
+                        const iconSize = (width<height) ? width/3 : height/3;
+
+                        const ctx = icon.getContext('2d');
+
+                        ctx.translate((width-iconSize)/2, (height-iconSize)/2);
+
+                        ctx.beginPath();
+                        ctx.arc(iconSize/2, iconSize/2 ,iconSize/2, 0, 2*Math.PI, true);
+                        ctx.closePath();
+
+                        ctx.strokeStyle = 'white';
+                        ctx.lineWidth = 10;
+                        ctx.stroke();
+                        ctx.fillStyle = '#8f8f8f';
+                        ctx.fill();
+
+                        ctx.beginPath();
+                        ctx.moveTo(iconSize/3, iconSize/4);
+                        ctx.lineTo(3*iconSize/4, iconSize/2);
+                        ctx.lineTo(iconSize/3, 3*iconSize/4);
+                        ctx.lineTo(iconSize/3, iconSize/4);
+                        ctx.closePath();
+                        ctx.fillStyle = 'white';
+                        ctx.fill();
+
+                        ctx.stroke();
+                    }, 100);
+
+                    $(mainContainer).bind('click', function () {
+                        if(video.paused){
+                            icon.style.display = 'none';
+                            video.play();
+                        }else{
+                            icon.style.display = 'block';
+                            video.pause();
+                        }
+                    });
+                }
+            {% else %}
+                loadPaella('playerContainer', '{{ multimediaObject.id }}');
+            {% endif %}
+
+            function setPaellaProfile(profileName) {
+                $('.viewModeItemButton').removeClass('selected');
+                $('.viewModeItemButton.' + profileName).addClass('selected');
+                paella.player.setProfile(profileName);
+                base.cookies.set("lastProfile", profileName);
+            }
+        </script>
+    {% endif %}
 {% endblock %}

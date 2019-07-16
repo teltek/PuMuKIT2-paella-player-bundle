@@ -24,7 +24,7 @@ class BasePlaylistController extends BasePlaylistControllero
      *
      * @return \Symfony\Component\HttpFoundation\RedirectResponse|Response
      */
-    public function indexAction(Series $series, Request $request)
+    public function indexAction(Request $request, Series $series)
     {
         $mmobjId = $request->get('videoId');
         $videoPos = $request->get('videoPos');

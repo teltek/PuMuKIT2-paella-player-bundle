@@ -12,24 +12,77 @@ use Pumukit\BasePlayerBundle\Controller\BasePlayerController as BasePlayerContro
 class BasePlayerController extends BasePlayerControllero
 {
     /**
-     * @Route("/videoplayer/magic/{secret}", name="pumukit_videoplayer_magicindex")
+     * @Route("/videoplayer/{id}", name="pumukit_videoplayer_index", defaults={"show_block": true, "no_channels": true, "track": false})
+     * @Route("/videoplayer/opencast/{id}", name="pumukit_videoplayer_opencast", defaults={"show_block": true, "no_channels": true, "track": false})
      * @Template("PumukitPaellaPlayerBundle:PaellaPlayer:player.html.twig")
+     *
+     * @param Request          $request
+     * @param MultimediaObject $multimediaObject
+     *
+     * @return array|mixed|\Symfony\Component\HttpFoundation\RedirectResponse|Response
      */
-    public function magicAction(MultimediaObject $multimediaObject, Request $request)
+    public function indexAction(Request $request, MultimediaObject $multimediaObject)
     {
-        if (!$request->query->has('secret')) {
-            return $this->redirect($this->generateUrl('pumukit_videoplayer_magicindex', array('id' => $multimediaObject->getId(), 'secret' => $multimediaObject->getSecret())).'&secret='.$multimediaObject->getSecret());
+        $request = $this->container->get('request_stack')->getMasterRequest();
+
+        $playerService = $this->get('pumukit_baseplayer.player');
+        $canBeReproduced = $playerService->canBeReproduced($multimediaObject, false);
+        if (!$canBeReproduced) {
+            return [
+                'object' => $multimediaObject,
+            ];
         }
 
-        $response = $this->testBroadcast($multimediaObject, $request);
+        return $this->doRender($request, $multimediaObject, false);
+    }
+
+    /**
+     * @Route("/videoplayer/magic/{secret}", name="pumukit_videoplayer_magicindex", defaults={"show_block": true, "no_channels": true, "track": false})
+     * @Template("PumukitPaellaPlayerBundle:PaellaPlayer:player.html.twig")
+     *
+     * @param Request          $request
+     * @param MultimediaObject $multimediaObject
+     *
+     * @return array|mixed|\Symfony\Component\HttpFoundation\RedirectResponse|Response
+     */
+    public function magicAction(Request $request, MultimediaObject $multimediaObject)
+    {
+        if (!$request->query->has('secret')) {
+            return $this->redirect($this->generateUrl('pumukit_videoplayer_magicindex', array(
+                'id' => $multimediaObject->getId(),
+                'secret' => $multimediaObject->getSecret(),
+                )).'&secret='.$multimediaObject->getSecret()
+            );
+        }
+
+        $playerService = $this->get('pumukit_baseplayer.player');
+        $canBeReproduced = $playerService->canBeReproduced($multimediaObject, true);
+        if (!$canBeReproduced) {
+            return [
+                'object' => $multimediaObject,
+            ];
+        }
+
+        return $this->doRender($request, $multimediaObject, true);
+    }
+
+    /**
+     * @param Request          $request
+     * @param MultimediaObject $multimediaObject
+     * @param bool             $isMagicUrl
+     *
+     * @return array|bool|\Symfony\Component\HttpFoundation\RedirectResponse|Response
+     */
+    public function doRender(Request $request, MultimediaObject $multimediaObject, $isMagicUrl = false)
+    {
+        $embeddedBroadcastService = $this->get('pumukitschema.embeddedbroadcast');
+        $password = $request->get('broadcast_password');
+        $response = $embeddedBroadcastService->canUserPlayMultimediaObject($multimediaObject, $this->getUser(), $password);
         if ($response instanceof Response) {
             return $response;
         }
 
-        $track = $request->query->has('track_id') ?
-               $multimediaObject->getTrackById($request->query->get('track_id')) :
-               $multimediaObject->getDisplayTrack();
-
+        $track = $request->query->has('track_id') ? $multimediaObject->getTrackById($request->query->get('track_id')) : $multimediaObject->getDisplayTrack();
         if ($track && $track->containsTag('download')) {
             return $this->redirect($track->getUrl());
         }
@@ -57,7 +110,7 @@ class BasePlayerController extends BasePlayerControllero
         return array(
             'autostart' => $this->getAutoStart($request),
             'autoplay_fallback' => $this->container->getParameter('pumukitpaella.autoplay'),
-            'intro' => $this->getIntroForMultimediaObject($multimediaObject->getProperty('intro'), $request->query->get('intro')),
+            'intro' => $this->get('pumukit_baseplayer.intro')->getIntroForMultimediaObject($request->query->get('intro'), $multimediaObject->getProperty('intro')),
             'custom_css_url' => $this->container->getParameter('pumukitpaella.custom_css_url'),
             'logo' => $this->container->getParameter('pumukitpaella.logo'),
             'multimediaObject' => $multimediaObject,
@@ -65,65 +118,15 @@ class BasePlayerController extends BasePlayerControllero
             'when_dispatch_view_event' => $this->getParameterWithDefaultValue('pumukitplayer.when_dispatch_view_event', 'on_load'),
             'tracks' => $tracks,
             'opencast_host' => $this->getParameterWithDefaultValue('pumukit_opencast.host', ''),
+            'magic_url' => $isMagicUrl,
         );
     }
 
     /**
-     * @Route("/videoplayer/{id}", name="pumukit_videoplayer_index" )
-     * @Route("/videoplayer/opencast/{id}", name="pumukit_videoplayer_opencast" )
-     * @Template("PumukitPaellaPlayerBundle:PaellaPlayer:player.html.twig")
+     * @param $request
+     *
+     * @return bool
      */
-    public function indexAction(MultimediaObject $multimediaObject, Request $request)
-    {
-        $request = $this->container->get('request_stack')->getMasterRequest();
-
-        $response = $this->testBroadcast($multimediaObject, $request);
-        if ($response instanceof Response) {
-            return $response;
-        }
-
-        $track = $request->query->has('track_id') ?
-               $multimediaObject->getTrackById($request->query->get('track_id')) :
-               $multimediaObject->getDisplayTrack();
-
-        if ($track && $track->containsTag('download')) {
-            return $this->redirect($track->getUrl());
-        }
-
-        if ($url = $multimediaObject->getProperty('externalplayer')) {
-            return $this->redirect($url);
-        }
-
-        if ($request->query->has('raw')) {
-            return $this->render('PumukitPaellaPlayerBundle:BasePlayer:player.html.twig', array(
-                'autostart' => $this->getAutoStart($request),
-                'autoplay_fallback' => $this->container->getParameter('pumukitpaella.autoplay'),
-                'when_dispatch_view_event' => $this->getParameterWithDefaultValue('pumukitplayer.when_dispatch_view_event', 'on_load'),
-                'multimediaObject' => $multimediaObject,
-                'track' => $track,
-            ));
-        }
-
-        if (!$track && $multimediaObject->isMultistream()) {
-            $tracks = $multimediaObject->getFilteredTracksWithTags(array('presenter/delivery', 'presentation/delivery'));
-        } else {
-            $tracks = array($track);
-        }
-
-        return array(
-            'autostart' => $this->getAutoStart($request),
-            'autoplay_fallback' => $this->container->getParameter('pumukitpaella.autoplay'),
-            'intro' => $this->getIntroForMultimediaObject($multimediaObject->getProperty('intro'), $request->query->get('intro')),
-            'custom_css_url' => $this->container->getParameter('pumukitpaella.custom_css_url'),
-            'logo' => $this->container->getParameter('pumukitpaella.logo'),
-            'multimediaObject' => $multimediaObject,
-            'object' => $multimediaObject,
-            'when_dispatch_view_event' => $this->getParameterWithDefaultValue('pumukitplayer.when_dispatch_view_event', 'on_load'),
-            'tracks' => $tracks,
-            'opencast_host' => $this->getParameterWithDefaultValue('pumukit_opencast.host', ''),
-        );
-    }
-
     private function getAutoStart($request)
     {
         if ('disabled' === $this->container->getParameter('pumukitpaella.autoplay')) {
@@ -141,6 +144,12 @@ class BasePlayerController extends BasePlayerControllero
         return $autoStart;
     }
 
+    /**
+     * @param      $name
+     * @param null $default
+     *
+     * @return mixed|null
+     */
     private function getParameterWithDefaultValue($name, $default = null)
     {
         if ($this->container->hasParameter($name)) {
@@ -148,22 +157,5 @@ class BasePlayerController extends BasePlayerControllero
         }
 
         return $default;
-    }
-
-    /**
-     * @deprecated: compatibility layer. Remove with PuMuKIT version 2.5.x
-     */
-    private function getIntroForMultimediaObject($introProperty = null, $introParameter = null)
-    {
-        if (!$this->has('pumukit_baseplayer.intro')) {
-            return $this->getIntro($introParameter);
-        }
-
-        $service = $this->get('pumukit_baseplayer.intro');
-        if (method_exists($service, 'getIntroForMultimediaObject')) {
-            return $service->getIntroForMultimediaObject($introProperty, $introParameter);
-        }
-
-        return $this->get('pumukit_baseplayer.intro')->getIntro($introParameter);
     }
 }
